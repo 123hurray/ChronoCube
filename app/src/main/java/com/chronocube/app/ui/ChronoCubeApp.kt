@@ -12,29 +12,26 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
@@ -127,106 +124,75 @@ fun ChronoCubeApp(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = {
-            AppHeader(
-                sourceName = uiState.sourceName,
-                onSelectVideo = { videoPicker.launch(arrayOf("video/*")) },
-            )
-        },
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { innerPadding ->
-        BoxWithConstraints(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .navigationBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .background(Color.Black),
         ) {
-            val wideLayout = maxWidth >= 760.dp
-            if (wideLayout) {
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    CubeViewport(
-                        state = uiState,
-                        resetCameraSignal = resetCameraSignal,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                    )
-                    ControlPanel(
-                        state = uiState,
-                        onSelectVideo = { videoPicker.launch(arrayOf("video/*")) },
-                        onTogglePlayback = viewModel::togglePlayback,
-                        onPlayheadChange = viewModel::setPlayhead,
-                        onResetPlayback = viewModel::resetPlayback,
-                        onResetCamera = { resetCameraSignal += 1L },
-                        onRequestedSlicesChange = viewModel::setRequestedSlices,
-                        onRegenerate = viewModel::regenerateVideo,
-                        onCubeDepthChange = viewModel::setCubeDepth,
-                        onOpacityChange = viewModel::setSliceOpacity,
-                        onMotionBoostChange = viewModel::setMotionBoost,
-                        modifier = Modifier
-                            .width(370.dp)
-                            .fillMaxHeight(),
-                    )
-                }
-            } else {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    CubeViewport(
-                        state = uiState,
-                        resetCameraSignal = resetCameraSignal,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                    )
-                    ControlPanel(
-                        state = uiState,
-                        onSelectVideo = { videoPicker.launch(arrayOf("video/*")) },
-                        onTogglePlayback = viewModel::togglePlayback,
-                        onPlayheadChange = viewModel::setPlayhead,
-                        onResetPlayback = viewModel::resetPlayback,
-                        onResetCamera = { resetCameraSignal += 1L },
-                        onRequestedSlicesChange = viewModel::setRequestedSlices,
-                        onRegenerate = viewModel::regenerateVideo,
-                        onCubeDepthChange = viewModel::setCubeDepth,
-                        onOpacityChange = viewModel::setSliceOpacity,
-                        onMotionBoostChange = viewModel::setMotionBoost,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .wrapContentHeight(),
-                    )
-                }
-            }
+            CubeViewport(
+                state = uiState,
+                resetCameraSignal = resetCameraSignal,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(4.dp),
+            )
+            CompactHeader(
+                sourceName = uiState.sourceName,
+                onSelectVideo = { videoPicker.launch(arrayOf("video/*")) },
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
+            ControlPanel(
+                state = uiState,
+                onSelectVideo = { videoPicker.launch(arrayOf("video/*")) },
+                onTogglePlayback = viewModel::togglePlayback,
+                onPlayheadChange = viewModel::setPlayhead,
+                onResetPlayback = viewModel::resetPlayback,
+                onResetCamera = { resetCameraSignal += 1L },
+                onRequestedSlicesChange = viewModel::setRequestedSlices,
+                onRegenerate = viewModel::regenerateVideo,
+                onCubeDepthChange = viewModel::setCubeDepth,
+                onOpacityChange = viewModel::setSliceOpacity,
+                onMotionBoostChange = viewModel::setMotionBoost,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 8.dp, vertical = 8.dp)
+                    .widthIn(max = 760.dp),
+            )
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AppHeader(
+private fun CompactHeader(
     sourceName: String?,
     onSelectVideo: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.background,
-        tonalElevation = 0.dp,
+        modifier = modifier
+            .statusBarsPadding()
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .widthIn(max = 760.dp)
+            .fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
+        tonalElevation = 4.dp,
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .statusBarsPadding()
-                .height(64.dp)
-                .padding(horizontal = 18.dp),
+                .height(50.dp)
+                .padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "ChronoCube",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onBackground,
                 )
                 Text(
@@ -237,7 +203,7 @@ private fun AppHeader(
                 )
             }
             TextButton(onClick = onSelectVideo) {
-                Text(if (sourceName == null) "导入视频" else "更换视频")
+                Text(if (sourceName == null) "导入" else "更换")
             }
         }
     }
@@ -318,7 +284,8 @@ private fun CubeViewport(
             Surface(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 12.dp),
+                    .statusBarsPadding()
+                    .padding(top = 66.dp),
                 shape = RoundedCornerShape(50),
                 color = Color.Black.copy(alpha = 0.55f),
             ) {
@@ -451,7 +418,7 @@ private fun EmptyViewport() {
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = "视频帧会沿时间轴堆叠，并在播放时穿过立方体",
+            text = "切片位置保持固定，播放时高亮帧沿时间轴向后推进",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -478,86 +445,106 @@ private fun ControlPanel(
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         ),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(18.dp),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = state.timeLabel,
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = state.frames.size.toString() + " 帧",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Slider(
-                value = state.playhead,
-                onValueChange = onPlayheadChange,
-                enabled = state.hasVideo && !state.isLoading,
-                valueRange = 0f..1f,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Button(
                     onClick = if (state.hasVideo) onTogglePlayback else onSelectVideo,
                     enabled = !state.isLoading,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                    ),
                 ) {
                     Text(
                         when {
-                            !state.hasVideo -> "选择视频"
+                            !state.hasVideo -> "导入"
                             state.isPlaying -> "暂停"
                             else -> "播放"
                         },
                     )
                 }
-                OutlinedButton(
-                    onClick = onResetPlayback,
+                Slider(
+                    value = state.playhead,
+                    onValueChange = onPlayheadChange,
                     enabled = state.hasVideo && !state.isLoading,
+                    valueRange = 0f..1f,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = state.timeLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+                TextButton(
+                    onClick = { settingsExpanded = !settingsExpanded },
                 ) {
-                    Text("回到起点")
+                    Text(if (settingsExpanded) "收起" else "参数")
                 }
-                OutlinedButton(
-                    onClick = onResetCamera,
-                    enabled = state.hasVideo,
-                ) {
-                    Text("复位视角")
-                }
-            }
-
-            HorizontalDivider(
-                modifier = Modifier.padding(top = 2.dp),
-                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
-            )
-            TextButton(
-                onClick = { settingsExpanded = !settingsExpanded },
-                modifier = Modifier.align(Alignment.End),
-            ) {
-                Text(if (settingsExpanded) "收起参数" else "调整立方体参数")
             }
 
             AnimatedVisibility(visible = settingsExpanded) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 430.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 4.dp),
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        OutlinedButton(
+                            onClick = onSelectVideo,
+                            enabled = !state.isLoading,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("更换视频")
+                        }
+                        OutlinedButton(
+                            onClick = onResetPlayback,
+                            enabled = state.hasVideo && !state.isLoading,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("时间复位")
+                        }
+                        OutlinedButton(
+                            onClick = onResetCamera,
+                            enabled = state.hasVideo,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("视角复位")
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = "切片固定在时间轴上",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = state.frames.size.toString() + " 帧",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.secondary,
+                        )
+                    }
                     SettingSlider(
                         label = "时间深度",
                         valueLabel = "%.2f".format(state.cubeDepth),

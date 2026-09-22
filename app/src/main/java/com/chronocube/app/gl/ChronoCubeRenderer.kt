@@ -11,6 +11,7 @@ import java.nio.FloatBuffer
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.cos
+import kotlin.math.roundToInt
 
 internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
     @Volatile
@@ -94,6 +95,7 @@ internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
         updatePlaneGeometry()
         updateViewMatrix()
         drawSlices()
+        drawHighlightOutline()
         drawCubeOutline()
     }
 
@@ -286,11 +288,7 @@ internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
                 cos(Math.toRadians(pitchDegrees.toDouble()))
             ).toFloat()
         val drawOrder = textures.indices.sortedBy { zPositions[it] * facing }
-        val selectedIndex = if (textures.size <= 1) {
-            0
-        } else {
-            (playhead * (textures.size - 1)).toInt().coerceIn(textures.indices)
-        }
+        val selectedIndex = selectedFrameIndex(textures.size)
 
         drawOrder.forEach { index ->
             Matrix.setIdentityM(localModel, 0)
@@ -308,6 +306,47 @@ internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
         GLES30.glDisableVertexAttribArray(positionLocation)
         GLES30.glDisableVertexAttribArray(textureCoordinateLocation)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
+    }
+
+    private fun drawHighlightOutline() {
+        if (textures.isEmpty()) return
+
+        val aspect = videoAspectRatio
+        val halfWidth = if (aspect >= 1f) 1.065f else 1.065f * aspect
+        val halfHeight = if (aspect >= 1f) 1.065f / aspect else 1.065f
+        val highlightZ = sliceZ(selectedFrameIndex(textures.size), textures.size)
+        val vertices = floatBuffer(
+            floatArrayOf(
+                -halfWidth, -halfHeight, 0f, halfWidth, -halfHeight, 0f,
+                halfWidth, -halfHeight, 0f, halfWidth, halfHeight, 0f,
+                halfWidth, halfHeight, 0f, -halfWidth, halfHeight, 0f,
+                -halfWidth, halfHeight, 0f, -halfWidth, -halfHeight, 0f,
+            ),
+        )
+
+        GLES30.glUseProgram(lineProgram)
+        GLES30.glEnable(GLES30.GL_BLEND)
+        GLES30.glLineWidth(3f)
+        Matrix.setIdentityM(localModel, 0)
+        Matrix.translateM(localModel, 0, 0f, 0f, highlightZ)
+        buildMvp(localModel)
+
+        val positionLocation = GLES30.glGetAttribLocation(lineProgram, "aPosition")
+        val mvpLocation = GLES30.glGetUniformLocation(lineProgram, "uMvp")
+        val colorLocation = GLES30.glGetUniformLocation(lineProgram, "uColor")
+        GLES30.glUniformMatrix4fv(mvpLocation, 1, false, mvp, 0)
+        GLES30.glUniform4f(colorLocation, 0.37f, 0.96f, 0.78f, 0.96f)
+        GLES30.glEnableVertexAttribArray(positionLocation)
+        GLES30.glVertexAttribPointer(
+            positionLocation,
+            3,
+            GLES30.GL_FLOAT,
+            false,
+            3 * Float.SIZE_BYTES,
+            vertices,
+        )
+        GLES30.glDrawArrays(GLES30.GL_LINES, 0, 8)
+        GLES30.glDisableVertexAttribArray(positionLocation)
     }
 
     private fun drawCubeOutline() {
@@ -364,10 +403,13 @@ internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
 
     private fun sliceZ(index: Int, count: Int): Float {
         if (count <= 1) return 0f
-        val frameTime = index.toFloat() / count
-        var wrapped = (frameTime - playhead + 0.5f) % 1f
-        if (wrapped < 0f) wrapped += 1f
-        return (wrapped - 0.5f) * cubeDepth
+        val frameTime = index.toFloat() / (count - 1)
+        return cubeDepth * (0.5f - frameTime)
+    }
+
+    private fun selectedFrameIndex(count: Int): Int {
+        if (count <= 1) return 0
+        return (playhead * (count - 1)).roundToInt().coerceIn(0, count - 1)
     }
 
     private fun floatBuffer(values: FloatArray): FloatBuffer =
@@ -413,9 +455,10 @@ internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
                 float moving = smoothstep(0.045, 0.30, difference);
                 float motionAlpha = mix(0.055, 1.0, moving);
                 float alphaMask = mix(1.0, motionAlpha, uMotionBoost);
-                float highlightGain = mix(1.0, 2.15, uHighlight);
-                float finalAlpha = clamp(uOpacity * alphaMask * highlightGain, 0.0, 0.78);
-                vec3 liftedColor = mix(frameColor, frameColor * 1.12, uHighlight);
+                float highlightGain = mix(1.0, 3.1, uHighlight);
+                float finalAlpha = clamp(uOpacity * alphaMask * highlightGain, 0.0, 0.84);
+                vec3 accent = vec3(0.37, 0.96, 0.78);
+                vec3 liftedColor = mix(frameColor, accent, uHighlight * 0.16);
                 outputColor = vec4(liftedColor, finalAlpha);
             }
         """
