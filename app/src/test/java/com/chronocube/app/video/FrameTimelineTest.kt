@@ -22,7 +22,11 @@ class FrameTimelineTest {
 
         assertEquals(48, samples.size)
         assertEquals(0L, samples.first())
-        assertTrue(samples.zipWithNext().all { (left, right) -> left <= right })
+        assertTrue(
+            (1 until samples.size).all { index ->
+                samples[index - 1] <= samples[index]
+            },
+        )
         assertTrue(samples.last() < 12_345_000L)
     }
 }
