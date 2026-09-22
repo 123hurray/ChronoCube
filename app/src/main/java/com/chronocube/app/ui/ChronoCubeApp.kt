@@ -567,7 +567,7 @@ private fun ControlPanel(
                         onValueChange = onBackgroundBrightnessChange,
                     )
                     SettingSlider(
-                        label = "非高亮透明度",
+                        label = "非高亮整体透明度",
                         valueLabel =
                             (state.backgroundTransparency * 100).roundToInt().toString() + "%",
                         value = state.backgroundTransparency,

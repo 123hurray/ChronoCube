@@ -155,8 +155,8 @@ class ChronoCubeViewModel(application: Application) : AndroidViewModel(applicati
             if (!current.isPlaying || !current.hasVideo) {
                 current
             } else {
-                val loopSeconds = 6f
-                current.copy(playhead = (current.playhead + deltaSeconds / loopSeconds) % 1f)
+                val durationSeconds = (current.durationMs / 1_000f).coerceAtLeast(0.1f)
+                current.copy(playhead = (current.playhead + deltaSeconds / durationSeconds) % 1f)
             }
         }
     }

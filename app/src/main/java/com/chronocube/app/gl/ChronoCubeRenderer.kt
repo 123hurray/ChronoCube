@@ -10,7 +10,6 @@ import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
-import kotlin.math.roundToInt
 
 internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
     @Volatile
@@ -263,13 +262,15 @@ internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
         val mvpLocation = GLES30.glGetUniformLocation(textureProgram, "uMvp")
         val backgroundBrightnessLocation =
             GLES30.glGetUniformLocation(textureProgram, "uBackgroundBrightness")
-        val backgroundTransparencyLocation =
-            GLES30.glGetUniformLocation(textureProgram, "uBackgroundTransparency")
+        val backgroundLayerAlphaLocation =
+            GLES30.glGetUniformLocation(textureProgram, "uBackgroundLayerAlpha")
         val highlightTransparencyLocation =
             GLES30.glGetUniformLocation(textureProgram, "uHighlightTransparency")
         val motionBoostLocation = GLES30.glGetUniformLocation(textureProgram, "uMotionBoost")
         val highlightLocation = GLES30.glGetUniformLocation(textureProgram, "uHighlight")
+        val frameMixLocation = GLES30.glGetUniformLocation(textureProgram, "uFrameMix")
         val currentTextureLocation = GLES30.glGetUniformLocation(textureProgram, "uFrame")
+        val nextTextureLocation = GLES30.glGetUniformLocation(textureProgram, "uNextFrame")
         val referenceTextureLocation = GLES30.glGetUniformLocation(textureProgram, "uReference")
 
         planeBuffer.position(0)
@@ -296,10 +297,18 @@ internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
         GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textures.first())
         GLES30.glUniform1i(referenceTextureLocation, 1)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE2)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textures.first())
+        GLES30.glUniform1i(nextTextureLocation, 2)
         GLES30.glUniform1f(backgroundBrightnessLocation, backgroundBrightness)
-        GLES30.glUniform1f(backgroundTransparencyLocation, backgroundTransparency)
+        val backgroundLayerAlpha = RenderMath.backgroundLayerAlpha(
+            stackTransparency = backgroundTransparency,
+            sliceCount = textures.size,
+        )
+        GLES30.glUniform1f(backgroundLayerAlphaLocation, backgroundLayerAlpha)
         GLES30.glUniform1f(highlightTransparencyLocation, highlightTransparency)
         GLES30.glUniform1f(motionBoostLocation, motionBoost)
+        GLES30.glUniform1i(currentTextureLocation, 0)
 
         val zPositions = FloatArray(textures.size) { index -> sliceZ(index, textures.size) }
         val facing = globalModel[10]
@@ -308,23 +317,39 @@ internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
         } else {
             0..textures.lastIndex
         }
-        val selectedIndex = selectedFrameIndex(textures.size)
-
+        // Draw the fixed time slices first. Alpha is normalized for the complete stack, so
+        // increasing the slice count does not make the volume unexpectedly opaque.
+        GLES30.glUniform1f(highlightLocation, 0f)
+        GLES30.glUniform1f(frameMixLocation, 0f)
         drawOrder.forEach { index ->
             Matrix.setIdentityM(localModel, 0)
             Matrix.translateM(localModel, 0, 0f, 0f, zPositions[index])
             buildMvp(localModel)
             GLES30.glUniformMatrix4fv(mvpLocation, 1, false, mvp, 0)
-            GLES30.glUniform1f(highlightLocation, if (index == selectedIndex) 1f else 0f)
 
             GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textures[index])
-            GLES30.glUniform1i(currentTextureLocation, 0)
             GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
         }
 
+        // Composite a continuous highlight pass last, so background brightness and opacity
+        // cannot cover it. Adjacent source frames are blended to remove the slideshow effect.
+        val frameBlend = RenderMath.frameBlend(playhead, textures.size)
+        Matrix.setIdentityM(localModel, 0)
+        Matrix.translateM(localModel, 0, 0f, 0f, sliceZ(playhead))
+        buildMvp(localModel)
+        GLES30.glUniformMatrix4fv(mvpLocation, 1, false, mvp, 0)
+        GLES30.glUniform1f(highlightLocation, 1f)
+        GLES30.glUniform1f(frameMixLocation, frameBlend.fraction)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textures[frameBlend.currentIndex])
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE2)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textures[frameBlend.nextIndex])
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+
         GLES30.glDisableVertexAttribArray(positionLocation)
         GLES30.glDisableVertexAttribArray(textureCoordinateLocation)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
     }
 
@@ -334,7 +359,7 @@ internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
         val aspect = videoAspectRatio
         val halfWidth = if (aspect >= 1f) 1.065f else 1.065f * aspect
         val halfHeight = if (aspect >= 1f) 1.065f / aspect else 1.065f
-        val highlightZ = sliceZ(selectedFrameIndex(textures.size), textures.size)
+        val highlightZ = sliceZ(playhead)
         val vertices = floatBuffer(
             floatArrayOf(
                 -halfWidth, -halfHeight, 0f, halfWidth, -halfHeight, 0f,
@@ -424,13 +449,10 @@ internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
     private fun sliceZ(index: Int, count: Int): Float {
         if (count <= 1) return 0f
         val frameTime = index.toFloat() / (count - 1)
-        return cubeDepth * (0.5f - frameTime)
+        return sliceZ(frameTime)
     }
 
-    private fun selectedFrameIndex(count: Int): Int {
-        if (count <= 1) return 0
-        return (playhead * (count - 1)).roundToInt().coerceIn(0, count - 1)
-    }
+    private fun sliceZ(frameTime: Float): Float = cubeDepth * (0.5f - frameTime)
 
     private fun defaultOrientation(): FloatArray {
         val result = FloatArray(16)
@@ -472,25 +494,29 @@ internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
 
         const val TEXTURE_FRAGMENT_SHADER = """
             #version 300 es
-            precision mediump float;
+            precision highp float;
             uniform sampler2D uFrame;
+            uniform sampler2D uNextFrame;
             uniform sampler2D uReference;
             uniform float uBackgroundBrightness;
-            uniform float uBackgroundTransparency;
+            uniform float uBackgroundLayerAlpha;
             uniform float uHighlightTransparency;
             uniform float uMotionBoost;
             uniform float uHighlight;
+            uniform float uFrameMix;
             in vec2 vTextureCoordinate;
             out vec4 outputColor;
 
             void main() {
-                vec3 frameColor = texture(uFrame, vTextureCoordinate).rgb;
+                vec3 currentColor = texture(uFrame, vTextureCoordinate).rgb;
+                vec3 nextColor = texture(uNextFrame, vTextureCoordinate).rgb;
+                vec3 frameColor = mix(currentColor, nextColor, uFrameMix);
                 vec3 referenceColor = texture(uReference, vTextureCoordinate).rgb;
                 float difference = length(frameColor - referenceColor);
                 float moving = smoothstep(0.045, 0.30, difference);
                 float motionAlpha = mix(0.055, 1.0, moving);
                 float alphaMask = mix(1.0, motionAlpha, uMotionBoost);
-                float backgroundAlpha = (1.0 - uBackgroundTransparency) * alphaMask;
+                float backgroundAlpha = uBackgroundLayerAlpha * alphaMask;
                 float highlightAlpha = 1.0 - uHighlightTransparency;
                 float finalAlpha = mix(backgroundAlpha, highlightAlpha, uHighlight);
                 vec3 accent = vec3(0.37, 0.96, 0.78);
