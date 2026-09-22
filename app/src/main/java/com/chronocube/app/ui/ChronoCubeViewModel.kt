@@ -29,7 +29,9 @@ data class ChronoCubeUiState(
     val playhead: Float = 0f,
     val requestedSlices: Int = 48,
     val cubeDepth: Float = 1.45f,
-    val sliceOpacity: Float = 0.13f,
+    val backgroundBrightness: Float = 0.55f,
+    val backgroundTransparency: Float = 0.90f,
+    val highlightTransparency: Float = 0.12f,
     val motionBoost: Float = 0.72f,
 ) {
     val hasVideo: Boolean get() = frames.isNotEmpty()
@@ -68,6 +70,9 @@ class ChronoCubeViewModel(application: Application) : AndroidViewModel(applicati
         _uiState.update {
             it.copy(
                 sourceName = displayName ?: "已选择的视频",
+                durationMs = 0L,
+                frames = emptyList(),
+                frameGeneration = it.frameGeneration + 1L,
                 isLoading = true,
                 loadingProgress = 0f,
                 errorMessage = null,
@@ -161,15 +166,23 @@ class ChronoCubeViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun setRequestedSlices(value: Float) {
-        _uiState.update { it.copy(requestedSlices = value.roundToInt().coerceIn(16, 72)) }
+        _uiState.update { it.copy(requestedSlices = value.roundToInt().coerceIn(16, 256)) }
     }
 
     fun setCubeDepth(value: Float) {
         _uiState.update { it.copy(cubeDepth = value.coerceIn(0.35f, 2.6f)) }
     }
 
-    fun setSliceOpacity(value: Float) {
-        _uiState.update { it.copy(sliceOpacity = value.coerceIn(0.04f, 0.35f)) }
+    fun setBackgroundBrightness(value: Float) {
+        _uiState.update { it.copy(backgroundBrightness = value.coerceIn(0.10f, 1.20f)) }
+    }
+
+    fun setBackgroundTransparency(value: Float) {
+        _uiState.update { it.copy(backgroundTransparency = value.coerceIn(0f, 0.98f)) }
+    }
+
+    fun setHighlightTransparency(value: Float) {
+        _uiState.update { it.copy(highlightTransparency = value.coerceIn(0f, 0.95f)) }
     }
 
     fun setMotionBoost(value: Float) {

@@ -11,7 +11,9 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 data class ExtractedVideo(
     val frames: List<Bitmap>,
@@ -21,6 +23,7 @@ data class ExtractedVideo(
 
 class VideoFrameExtractor(
     private val maxTextureSide: Int = 512,
+    private val textureMemoryBudgetBytes: Long = 64L * 1024L * 1024L,
 ) {
     suspend fun extract(
         context: Context,
@@ -53,9 +56,13 @@ class VideoFrameExtractor(
                 ?.toFloatOrNull()
                 ?: 0f
 
-            val count = requestedFrames.coerceIn(8, 72)
+            val count = requestedFrames.coerceIn(8, 256)
             val times = FrameTimeline.sampleTimesUs(durationMs, count)
-            val scale = (maxTextureSide.toFloat() / max(rawWidth, rawHeight))
+            val budgetedSide = sqrt(
+                textureMemoryBudgetBytes.toDouble() / count / BYTES_PER_PIXEL,
+            ).toInt().coerceAtLeast(MIN_TEXTURE_SIDE)
+            val targetMaxSide = min(maxTextureSide, budgetedSide)
+            val scale = (targetMaxSide.toFloat() / max(rawWidth, rawHeight))
                 .coerceAtMost(1f)
             val targetWidth = (rawWidth * scale).roundToInt().coerceAtLeast(2)
             val targetHeight = (rawHeight * scale).roundToInt().coerceAtLeast(2)
@@ -120,5 +127,10 @@ class VideoFrameExtractor(
         )
         if (rotated !== source) source.recycle()
         return rotated
+    }
+
+    private companion object {
+        const val BYTES_PER_PIXEL = 4
+        const val MIN_TEXTURE_SIDE = 160
     }
 }

@@ -29,4 +29,13 @@ class FrameTimelineTest {
         )
         assertTrue(samples.last() < 12_345_000L)
     }
+
+    @Test
+    fun supportsMaximumSliceCount() {
+        val samples = FrameTimeline.sampleTimesUs(durationMs = 30_000L, requestedCount = 256)
+
+        assertEquals(256, samples.size)
+        assertEquals(0L, samples.first())
+        assertTrue(samples.last() < 30_000_000L)
+    }
 }

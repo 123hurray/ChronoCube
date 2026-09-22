@@ -154,7 +154,9 @@ fun ChronoCubeApp(
                 onRequestedSlicesChange = viewModel::setRequestedSlices,
                 onRegenerate = viewModel::regenerateVideo,
                 onCubeDepthChange = viewModel::setCubeDepth,
-                onOpacityChange = viewModel::setSliceOpacity,
+                onBackgroundBrightnessChange = viewModel::setBackgroundBrightness,
+                onBackgroundTransparencyChange = viewModel::setBackgroundTransparency,
+                onHighlightTransparencyChange = viewModel::setHighlightTransparency,
                 onMotionBoostChange = viewModel::setMotionBoost,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -274,7 +276,9 @@ private fun CubeViewport(
                     view.updateSettings(
                         playhead = state.playhead,
                         cubeDepth = state.cubeDepth,
-                        sliceOpacity = state.sliceOpacity,
+                        backgroundBrightness = state.backgroundBrightness,
+                        backgroundTransparency = state.backgroundTransparency,
+                        highlightTransparency = state.highlightTransparency,
                         motionBoost = state.motionBoost,
                     )
                 },
@@ -290,7 +294,7 @@ private fun CubeViewport(
                 color = Color.Black.copy(alpha = 0.55f),
             ) {
                 Text(
-                    text = "拖动旋转 · 双指缩放 · 双击复位",
+                    text = "单指轨道旋转 · 双指缩放/扭转 · 双击复位",
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.82f),
@@ -436,7 +440,9 @@ private fun ControlPanel(
     onRequestedSlicesChange: (Float) -> Unit,
     onRegenerate: () -> Unit,
     onCubeDepthChange: (Float) -> Unit,
-    onOpacityChange: (Float) -> Unit,
+    onBackgroundBrightnessChange: (Float) -> Unit,
+    onBackgroundTransparencyChange: (Float) -> Unit,
+    onHighlightTransparencyChange: (Float) -> Unit,
     onMotionBoostChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -553,11 +559,28 @@ private fun ControlPanel(
                         onValueChange = onCubeDepthChange,
                     )
                     SettingSlider(
-                        label = "切片透明度",
-                        valueLabel = (state.sliceOpacity * 100).roundToInt().toString() + "%",
-                        value = state.sliceOpacity,
-                        valueRange = 0.04f..0.35f,
-                        onValueChange = onOpacityChange,
+                        label = "非高亮亮度",
+                        valueLabel =
+                            (state.backgroundBrightness * 100).roundToInt().toString() + "%",
+                        value = state.backgroundBrightness,
+                        valueRange = 0.10f..1.20f,
+                        onValueChange = onBackgroundBrightnessChange,
+                    )
+                    SettingSlider(
+                        label = "非高亮透明度",
+                        valueLabel =
+                            (state.backgroundTransparency * 100).roundToInt().toString() + "%",
+                        value = state.backgroundTransparency,
+                        valueRange = 0f..0.98f,
+                        onValueChange = onBackgroundTransparencyChange,
+                    )
+                    SettingSlider(
+                        label = "高亮帧透明度",
+                        valueLabel =
+                            (state.highlightTransparency * 100).roundToInt().toString() + "%",
+                        value = state.highlightTransparency,
+                        valueRange = 0f..0.95f,
+                        onValueChange = onHighlightTransparencyChange,
                     )
                     SettingSlider(
                         label = "运动轨迹增强",
@@ -570,8 +593,8 @@ private fun ControlPanel(
                         label = "提取切片数",
                         valueLabel = state.requestedSlices.toString(),
                         value = state.requestedSlices.toFloat(),
-                        valueRange = 16f..72f,
-                        steps = 55,
+                        valueRange = 16f..256f,
+                        steps = 239,
                         onValueChange = onRequestedSlicesChange,
                     )
                     FilledTonalButton(
@@ -582,7 +605,7 @@ private fun ControlPanel(
                         Text("按 " + state.requestedSlices + " 帧重新生成")
                     }
                     Text(
-                        text = "切片更多会提升时间细节，同时增加显存与处理时间。",
+                        text = "最多 256 帧；切片较多时会自动降低纹理分辨率以控制内存。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

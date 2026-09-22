@@ -10,7 +10,6 @@ import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
-import kotlin.math.cos
 import kotlin.math.roundToInt
 
 internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
@@ -30,16 +29,19 @@ internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
     private var cubeDepth: Float = 1.45f
 
     @Volatile
-    private var sliceOpacity: Float = 0.13f
+    private var backgroundBrightness: Float = 0.55f
+
+    @Volatile
+    private var backgroundTransparency: Float = 0.90f
+
+    @Volatile
+    private var highlightTransparency: Float = 0.12f
 
     @Volatile
     private var motionBoost: Float = 0.72f
 
     @Volatile
-    private var yawDegrees: Float = -28f
-
-    @Volatile
-    private var pitchDegrees: Float = 18f
+    private var orientationMatrix: FloatArray = defaultOrientation()
 
     @Volatile
     private var zoom: Float = 1f
@@ -108,18 +110,31 @@ internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
     fun setRenderSettings(
         playhead: Float,
         cubeDepth: Float,
-        sliceOpacity: Float,
+        backgroundBrightness: Float,
+        backgroundTransparency: Float,
+        highlightTransparency: Float,
         motionBoost: Float,
     ) {
         this.playhead = playhead.coerceIn(0f, 1f)
         this.cubeDepth = cubeDepth.coerceIn(0.35f, 2.6f)
-        this.sliceOpacity = sliceOpacity.coerceIn(0.04f, 0.35f)
+        this.backgroundBrightness = backgroundBrightness.coerceIn(0.10f, 1.20f)
+        this.backgroundTransparency = backgroundTransparency.coerceIn(0f, 0.98f)
+        this.highlightTransparency = highlightTransparency.coerceIn(0f, 0.95f)
         this.motionBoost = motionBoost.coerceIn(0f, 1f)
     }
 
-    fun rotateBy(deltaX: Float, deltaY: Float) {
-        yawDegrees = (yawDegrees + deltaX * 0.28f) % 360f
-        pitchDegrees = (pitchDegrees + deltaY * 0.28f).coerceIn(-82f, 82f)
+    fun orbitBy(deltaYawDegrees: Float, deltaPitchDegrees: Float) {
+        val delta = FloatArray(16)
+        Matrix.setIdentityM(delta, 0)
+        Matrix.rotateM(delta, 0, deltaPitchDegrees, 1f, 0f, 0f)
+        Matrix.rotateM(delta, 0, deltaYawDegrees, 0f, 1f, 0f)
+        orientationMatrix = multiply(delta, orientationMatrix)
+    }
+
+    fun rollBy(deltaDegrees: Float) {
+        val delta = FloatArray(16)
+        Matrix.setRotateM(delta, 0, deltaDegrees, 0f, 0f, 1f)
+        orientationMatrix = multiply(delta, orientationMatrix)
     }
 
     fun zoomBy(scaleFactor: Float) {
@@ -127,8 +142,7 @@ internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
     }
 
     fun resetCamera() {
-        yawDegrees = -28f
-        pitchDegrees = 18f
+        orientationMatrix = defaultOrientation()
         zoom = 1f
     }
 
@@ -234,9 +248,7 @@ internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
             1f,
             0f,
         )
-        Matrix.setIdentityM(globalModel, 0)
-        Matrix.rotateM(globalModel, 0, pitchDegrees, 1f, 0f, 0f)
-        Matrix.rotateM(globalModel, 0, yawDegrees, 0f, 1f, 0f)
+        System.arraycopy(orientationMatrix, 0, globalModel, 0, 16)
         Matrix.scaleM(globalModel, 0, zoom, zoom, zoom)
     }
 
@@ -249,7 +261,12 @@ internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
         val textureCoordinateLocation =
             GLES30.glGetAttribLocation(textureProgram, "aTextureCoordinate")
         val mvpLocation = GLES30.glGetUniformLocation(textureProgram, "uMvp")
-        val opacityLocation = GLES30.glGetUniformLocation(textureProgram, "uOpacity")
+        val backgroundBrightnessLocation =
+            GLES30.glGetUniformLocation(textureProgram, "uBackgroundBrightness")
+        val backgroundTransparencyLocation =
+            GLES30.glGetUniformLocation(textureProgram, "uBackgroundTransparency")
+        val highlightTransparencyLocation =
+            GLES30.glGetUniformLocation(textureProgram, "uHighlightTransparency")
         val motionBoostLocation = GLES30.glGetUniformLocation(textureProgram, "uMotionBoost")
         val highlightLocation = GLES30.glGetUniformLocation(textureProgram, "uHighlight")
         val currentTextureLocation = GLES30.glGetUniformLocation(textureProgram, "uFrame")
@@ -279,15 +296,18 @@ internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
         GLES30.glActiveTexture(GLES30.GL_TEXTURE1)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textures.first())
         GLES30.glUniform1i(referenceTextureLocation, 1)
-        GLES30.glUniform1f(opacityLocation, sliceOpacity)
+        GLES30.glUniform1f(backgroundBrightnessLocation, backgroundBrightness)
+        GLES30.glUniform1f(backgroundTransparencyLocation, backgroundTransparency)
+        GLES30.glUniform1f(highlightTransparencyLocation, highlightTransparency)
         GLES30.glUniform1f(motionBoostLocation, motionBoost)
 
         val zPositions = FloatArray(textures.size) { index -> sliceZ(index, textures.size) }
-        val facing = (
-            cos(Math.toRadians(yawDegrees.toDouble())) *
-                cos(Math.toRadians(pitchDegrees.toDouble()))
-            ).toFloat()
-        val drawOrder = textures.indices.sortedBy { zPositions[it] * facing }
+        val facing = globalModel[10]
+        val drawOrder = if (facing >= 0f) {
+            textures.lastIndex downTo 0
+        } else {
+            0..textures.lastIndex
+        }
         val selectedIndex = selectedFrameIndex(textures.size)
 
         drawOrder.forEach { index ->
@@ -412,6 +432,19 @@ internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
         return (playhead * (count - 1)).roundToInt().coerceIn(0, count - 1)
     }
 
+    private fun defaultOrientation(): FloatArray {
+        val result = FloatArray(16)
+        Matrix.setIdentityM(result, 0)
+        Matrix.rotateM(result, 0, -28f, 0f, 1f, 0f)
+        Matrix.rotateM(result, 0, 18f, 1f, 0f, 0f)
+        return result
+    }
+
+    private fun multiply(left: FloatArray, right: FloatArray): FloatArray =
+        FloatArray(16).also { result ->
+            Matrix.multiplyMM(result, 0, left, 0, right, 0)
+        }
+
     private fun floatBuffer(values: FloatArray): FloatBuffer =
         ByteBuffer.allocateDirect(values.size * Float.SIZE_BYTES)
             .order(ByteOrder.nativeOrder())
@@ -442,7 +475,9 @@ internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
             precision mediump float;
             uniform sampler2D uFrame;
             uniform sampler2D uReference;
-            uniform float uOpacity;
+            uniform float uBackgroundBrightness;
+            uniform float uBackgroundTransparency;
+            uniform float uHighlightTransparency;
             uniform float uMotionBoost;
             uniform float uHighlight;
             in vec2 vTextureCoordinate;
@@ -455,11 +490,14 @@ internal class ChronoCubeRenderer : android.opengl.GLSurfaceView.Renderer {
                 float moving = smoothstep(0.045, 0.30, difference);
                 float motionAlpha = mix(0.055, 1.0, moving);
                 float alphaMask = mix(1.0, motionAlpha, uMotionBoost);
-                float highlightGain = mix(1.0, 3.1, uHighlight);
-                float finalAlpha = clamp(uOpacity * alphaMask * highlightGain, 0.0, 0.84);
+                float backgroundAlpha = (1.0 - uBackgroundTransparency) * alphaMask;
+                float highlightAlpha = 1.0 - uHighlightTransparency;
+                float finalAlpha = mix(backgroundAlpha, highlightAlpha, uHighlight);
                 vec3 accent = vec3(0.37, 0.96, 0.78);
-                vec3 liftedColor = mix(frameColor, accent, uHighlight * 0.16);
-                outputColor = vec4(liftedColor, finalAlpha);
+                vec3 backgroundColor = frameColor * uBackgroundBrightness;
+                vec3 highlightColor = mix(frameColor, accent, 0.10);
+                vec3 finalColor = mix(backgroundColor, highlightColor, uHighlight);
+                outputColor = vec4(finalColor, clamp(finalAlpha, 0.0, 1.0));
             }
         """
 
